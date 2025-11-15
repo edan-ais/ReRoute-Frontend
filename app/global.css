@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+.page-wrapper {
+  @apply min-h-screen flex flex-col;
+}
+
+.page-inner {
+  @apply flex-1 max-w-6xl mx-auto w-full px-4 py-6;
+}
+
+.card {
+  @apply bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-lg;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-sky-600 hover:bg-sky-500 transition-colors;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 transition-colors;
+}
