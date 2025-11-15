@@ -13,10 +13,10 @@ export default function FileUploader() {
     setStatus(null);
     setUploading(true);
 
-    try:
+    try {
       const ingestionUrl =
         process.env.NEXT_PUBLIC_INGESTION_URL ||
-        "https://example-ingestion-server/ingest";
+        "https://example-ingestion-server.com/ingest";
 
       const formData = new FormData();
       Array.from(files).forEach((file) => {
@@ -48,19 +48,23 @@ export default function FileUploader() {
       <label className="block text-sm font-medium text-slate-200">
         Upload data files
       </label>
+
       <input
         type="file"
         multiple
         onChange={handleFilesSelected}
         className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-600 file:text-white hover:file:bg-sky-500"
       />
+
       <p className="text-xs text-slate-400">
-        CSV, JSON, or other structured files. These are streamed to your
-        ingestion server for normalization and storage.
+        CSV, JSON, PDFs, or images. These are streamed to your ingestion server
+        for normalization and storage.
       </p>
+
       {uploading && (
-        <p className="text-xs text-sky-400 animate-pulse">Uploading...</p>
+        <p className="text-xs text-sky-400 animate-pulse">Uploading…</p>
       )}
+
       {status && <p className="text-xs text-slate-200">{status}</p>}
     </div>
   );
