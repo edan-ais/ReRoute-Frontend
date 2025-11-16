@@ -23,20 +23,25 @@ const planeIcon = new L.Icon({
 export default function FlightMap({ flights, simulatedFlights, mode }: FlightMapProps) {
   const activeFlights = mode === "live" ? flights : simulatedFlights ?? flights;
 
-  const routes = useMemo(() => {
-    return activeFlights.map((flight) => {
-      // Very simple route approximation: origin a bit "behind", destination a bit "ahead"
-      const origin: [number, number] = [flight.latitude - 3, flight.longitude - 3];
-      const dest: [number, number] = [flight.latitude + 3, flight.longitude + 3];
-      return { id: flight.id, origin, dest };
-    });
-  }, [activeFlights]);
+  const routes = useMemo(
+    () =>
+      activeFlights.map((f) => ({
+        id: f.id,
+        positions:
+          f.path ??
+          ([
+            [f.latitude - 1, f.longitude - 1],
+            [f.latitude + 1, f.longitude + 1]
+          ] as [number, number][])
+      })),
+    [activeFlights]
+  );
 
   return (
     <div className="h-full w-full rounded-xl overflow-hidden border border-slate-800">
       <MapContainer
-        center={[37.5, -95]}
-        zoom={4}
+        center={[35.0, -118.0]} // Southwest / California focus
+        zoom={5}
         scrollWheelZoom={false}
         style={{ height: "100%", width: "100%" }}
         className="bg-slate-900"
@@ -46,16 +51,18 @@ export default function FlightMap({ flights, simulatedFlights, mode }: FlightMap
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+        {/* Curved flight paths */}
         {routes.map((r) => (
           <Polyline
             key={r.id}
-            positions={[r.origin, r.dest]}
+            positions={r.positions}
             color={mode === "live" ? "#3b82f6" : "#22c55e"}
             weight={3}
-            opacity={0.8}
+            opacity={0.85}
           />
         ))}
 
+        {/* Aircraft markers */}
         {activeFlights.map((f) => (
           <Marker
             key={f.id}
@@ -68,8 +75,7 @@ export default function FlightMap({ flights, simulatedFlights, mode }: FlightMap
                 <br />
                 {f.origin} → {f.destination}
                 <br />
-                {f.originName || "Unknown origin"} →{" "}
-                {f.destinationName || "Unknown destination"}
+                {(f.originName || "Unknown origin") + " → " + (f.destinationName || "Unknown destination")}
                 <br />
                 {f.latitude.toFixed(2)}°, {f.longitude.toFixed(2)}°
                 <br />
