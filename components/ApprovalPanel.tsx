@@ -21,11 +21,7 @@ export default function ApprovalPanel({
     <div className="space-y-4">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium">Agent Reroute Approvals</h2>
-          <p className="text-xs text-slate-400">
-            Review proposed reroutes generated from the live sector state.
-            Approving will apply updated flight plans and reduce aggregate risk.
-          </p>
+          <h2 className="text-sm font-medium">Reroute Approvals</h2>
         </div>
         <button
           type="button"
@@ -43,8 +39,7 @@ export default function ApprovalPanel({
 
       {!hasProposals && (
         <p className="text-xs text-slate-500">
-          No reroutes required for the current sector conditions. Select a
-          different emergency scenario to stress the system.
+          No active reroutes for the current sector view.
         </p>
       )}
 
@@ -89,7 +84,7 @@ export default function ApprovalPanel({
             </p>
 
             <p className="mt-1 text-[10px] text-slate-500">
-              Proposed at {new Date(p.createdAt).toLocaleTimeString()}
+              {new Date(p.createdAt).toLocaleTimeString()}
             </p>
           </div>
         ))}
