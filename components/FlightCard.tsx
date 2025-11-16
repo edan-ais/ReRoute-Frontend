@@ -15,6 +15,13 @@ export default function FlightCard({
   selected,
   onSelect
 }: FlightCardProps) {
+  const originLabel = flight.originName
+    ? `${flight.origin} · ${flight.originName}`
+    : flight.origin;
+  const destinationLabel = flight.destinationName
+    ? `${flight.destination} · ${flight.destinationName}`
+    : flight.destination;
+
   return (
     <button
       type="button"
@@ -32,7 +39,7 @@ export default function FlightCard({
             <span className="text-xs text-slate-400">({flight.id})</span>
           </span>
           <span className="text-xs text-slate-400">
-            {flight.origin} → {flight.destination}
+            {originLabel} → {destinationLabel}
           </span>
         </div>
         <RiskBadge value={flight.riskScore} />
