@@ -2,14 +2,14 @@
 // Airport
 // =====================================================
 export interface Airport {
-  code: string;       // ICAO code
-  name: string;       // Human readable label
+  code: string;       // ICAO code (KLAX)
+  name: string;       // Human readable name (Los Angeles Intl)
   lat: number;
   lon: number;
 }
 
 // =====================================================
-// Hazard Zones (visual overlays on the map)
+// Hazard Zones (always visible synthetic polygons)
 // =====================================================
 export interface HazardZone {
   id: string;
@@ -17,69 +17,48 @@ export interface HazardZone {
   label: string;
   severity: "low" | "medium" | "high";
 
-  // Polygon describing the hazard region
+  // Polygon vertices
   polygon: { lat: number; lon: number }[];
 }
 
 // =====================================================
-// Flight
+// Flight — synthetic only, animated along a path
 // =====================================================
 export interface Flight {
-  id: string;
-  callsign: string;
+  id: string;                    // FL1, FL2, etc.
+  callsign: string;              // FL1, AA123, etc.
 
-  origin: string;
-  originName?: string;
+  origin: string;                // ICAO
+  originName?: string;           // human readable
+  destination: string;           // ICAO
+  destinationName?: string;      // human readable
 
-  destination: string;
-  destinationName?: string;
+  status: string;                // enroute
+  phase: string;                 // cruise
 
-  status: string;
-  phase: string;
-
-  altitude: number;
-  speedKts: number;
+  altitude: number;              // feet
+  speedKts: number;              // knots
 
   latitude: number;
   longitude: number;
 
-  riskScore: number;
-  isEmergency: boolean;
+  riskScore: number;             // 0–1
+  isEmergency: boolean;          // not used heavily, but kept
 
-  frozen: boolean;
+  frozen: boolean;               // once rerouted, no more movement updates
 
+  // Flight path polyline
   path: { lat: number; lon: number }[];
+
+  // % progress along path (0–1)
   progress: number;
 
+  // ICAO-style route string
   route?: string;
 }
 
 // =====================================================
-// Condition
-// =====================================================
-export interface Condition {
-  id: string;
-  type: "weather" | "staffing" | "runway";
-  label: string;
-  severity: "low" | "medium" | "high";
-  description: string;
-  active: boolean;
-}
-
-// =====================================================
-// Scenario
-// =====================================================
-export type EmergencyScenarioId = "wx" | "runway" | "staffing";
-
-export interface EmergencyScenario {
-  id: EmergencyScenarioId;
-  name: string;
-  description: string;
-  type: "weather" | "runway" | "staffing";
-}
-
-// =====================================================
-// Reroute Proposal
+// Reroute Proposal (ATC sees before/after ICAO format)
 // =====================================================
 export interface RerouteProposal {
   id: string;
@@ -89,7 +68,6 @@ export interface RerouteProposal {
   currentRoute: string;
   proposedRoute: string;
 
-  // ATC-style ICAO-formatted plans
   icaoBefore: string;
   icaoAfter: string;
 
