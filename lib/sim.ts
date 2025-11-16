@@ -17,7 +17,7 @@ const AIRPORTS: Airport[] = [
   { code: "KPHX", name: "Phoenix Sky Harbor", lat: 33.4342, lon: -112.0116 }
 ];
 
-// Predefined flows to keep everything in one visible territory
+// Predefined flows to keep everything visible in one sector
 const ROUTES: [string, string][] = [
   ["KLAX", "KSFO"],
   ["KSAN", "KLAX"],
@@ -33,21 +33,21 @@ const ROUTES: [string, string][] = [
 
 function findAirport(code: string): Airport {
   const found = AIRPORTS.find((a) => a.code === code);
-  if (!found) {
-    return AIRPORTS[0];
-  }
-  return found;
+  return found ?? AIRPORTS[0];
 }
 
-// Simple distance in "lat/lon space" (good enough for animation)
+// Simple distance in lat/lon space
 function segmentLength(a: [number, number], b: [number, number]): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-// Given a polyline [ [lat,lon], ... ] and t in [0,1], interpolate along entire path
-function interpolatePath(path: [number, number][], t: number): { lat: number; lon: number } {
+// Interpolate along a polyline for t in [0,1]
+function interpolatePath(path: [number, number][], t: number): {
+  lat: number;
+  lon: number;
+} {
   if (path.length === 0) {
     return { lat: 0, lon: 0 };
   }
@@ -98,7 +98,7 @@ function buildCurvedPath(
 
   const mid: [number, number] = [midLat, midLon];
 
-  // 3-point path = a line with a visible "turn"
+  // 3-point path = visible "turn"
   return [start, mid, end];
 }
 
@@ -134,7 +134,8 @@ export function createSyntheticFlights(): Flight[] {
       riskScore: 0.3,
       route: `${origin.code} DCT FIX${i + 1} ${dest.code}`,
       path,
-      progress: initialProgress
+      progress: initialProgress,
+      isEmergency: false
     });
   }
 
@@ -154,7 +155,6 @@ export function stepFlights(prevFlights: Flight[]): Flight[] {
     const nextProgress = (prevProgress + delta) % 1;
 
     const pos = interpolatePath(flight.path, nextProgress);
-
     const altJitter =
       flight.altitude + Math.sin(nextProgress * Math.PI * 2) * 300;
 
