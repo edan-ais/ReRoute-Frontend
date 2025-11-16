@@ -1,74 +1,59 @@
-export interface Airport {
-  code: string;
-  name: string;
-  lat: number;
-  lon: number;
+import type { Flight } from "../lib/types";
+
+interface FlightCardProps {
+  flight: Flight;
+  selected: boolean;
+  onSelect: () => void;
 }
 
-export interface Flight {
-  id: string;
-  callsign: string;
+export default function FlightCard({
+  flight,
+  selected,
+  onSelect,
+}: FlightCardProps) {
+  const originLabel = flight.originName
+    ? `${flight.origin} · ${flight.originName}`
+    : flight.origin;
 
-  // ICAO identifiers
-  origin: string;
-  originName?: string;
-  destination: string;
-  destinationName?: string;
+  const destinationLabel = flight.destinationName
+    ? `${flight.destination} · ${flight.destinationName}`
+    : flight.destination;
 
-  status: string;
-  phase: string;
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left rounded-xl border p-3 transition ${
+        selected
+          ? "border-sky-400 bg-sky-950/40"
+          : "border-slate-700 bg-slate-900/40 hover:bg-slate-800/40"
+      }`}
+    >
+      <div className="flex justify-between">
+        <div className="font-semibold">{flight.callsign}</div>
+        <div className="text-xs text-slate-400">
+          Risk {Math.round(flight.riskScore * 100)}
+        </div>
+      </div>
 
-  altitude: number;
-  speedKts: number;
+      <div className="mt-1 text-sm text-slate-300">
+        {originLabel} → {destinationLabel}
+      </div>
 
-  latitude: number;
-  longitude: number;
+      <div className="mt-1 text-xs text-slate-500">
+        {Math.round(flight.altitude).toLocaleString()} ft ·{" "}
+        {Math.round(flight.speedKts)} kts
+      </div>
 
-  riskScore: number;
-  isEmergency: boolean;
-  frozen: boolean;
+      <div className="text-xs text-slate-500">
+        {flight.latitude.toFixed(2)}°N, {flight.longitude.toFixed(2)}°W
+      </div>
 
-  path: { lat: number; lon: number }[];
-  progress: number;
-
-  route?: string;
-}
-
-export interface Condition {
-  id: string;
-  type: "weather" | "staffing" | "runway";
-  label: string;
-  severity: "low" | "medium" | "high";
-  description: string;
-  active: boolean;
-}
-
-export type EmergencyScenarioId = "wx" | "runway" | "staffing";
-
-export interface EmergencyScenario {
-  id: EmergencyScenarioId;
-  name: string;
-  description: string;
-  type: "weather" | "runway" | "staffing";
-}
-
-export interface RerouteProposal {
-  id: string;
-  flightId: string;
-  callsign: string;
-
-  currentRoute: string;
-  proposedRoute: string;
-
-  icaoBefore: string;
-  icaoAfter: string;
-
-  riskBefore: number;
-  riskAfter: number;
-
-  reason: string;
-  createdAt: string;
-
-  applied: boolean;
+      {flight.route && (
+        <div className="mt-2 text-xs text-sky-300">
+          Route: {flight.route}
+        </div>
+      )}
+    </button>
+  );
 }
 
