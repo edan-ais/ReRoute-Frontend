@@ -1,90 +1,99 @@
+// components/ApprovalPanel.tsx
 "use client";
 
 import type { RerouteProposal } from "../lib/types";
 import RiskBadge from "./RiskBadge";
-import { useState } from "react";
 
-interface Props {
+interface ApprovalPanelProps {
   proposals: RerouteProposal[];
+  onApproveAll: () => void;
+  isApplying: boolean;
 }
 
-export default function ApprovalPanel({ proposals }: Props) {
-  const [local, setLocal] = useState(proposals);
-
-  function handleDecision(id: string, decision: "approve" | "reject") {
-    // Placeholder – in future call your agent server / backend
-    console.log(`Decision for ${id}: ${decision}`);
-    setLocal((prev) => prev.filter((p) => p.id !== id));
-  }
-
-  if (local.length === 0) {
-    return (
-      <div className="card">
-        <p className="text-sm text-slate-300">
-          No pending reroute proposals. The sector is currently stable.
-        </p>
-      </div>
-    );
-  }
+export default function ApprovalPanel({
+  proposals,
+  onApproveAll,
+  isApplying
+}: ApprovalPanelProps) {
+  const hasProposals = proposals.length > 0;
 
   return (
-    <div className="space-y-3">
-      {local.map((p) => (
-        <div key={p.id} className="card space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{p.callsign}</span>
-              <RiskBadge score={p.riskAfter} />
-            </div>
-            <span className="text-[10px] text-slate-500">
-              Proposed {new Date(p.createdAt).toLocaleTimeString()}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400">
-            Risk reduction:{" "}
-            <span className="text-slate-200">
-              {(p.riskBefore * 100).toFixed(0)}% →{" "}
-              {(p.riskAfter * 100).toFixed(0)}%
-            </span>
+    <div className="space-y-4">
+      <header className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium">Agent Reroute Approvals</h2>
+          <p className="text-xs text-slate-400">
+            Review proposed reroutes generated from the live sector state.
+            Approving will apply updated flight plans and reduce aggregate risk.
           </p>
-          <p className="text-[11px] text-slate-400">
-            Reason: {p.reason || "N/A"}
-          </p>
-          <div className="mt-2 grid gap-2 text-[11px] md:grid-cols-2">
-            <div className="bg-slate-950/60 rounded-lg p-2 border border-slate-800">
-              <p className="font-semibold mb-1 text-slate-200 text-[11px]">
-                Current route
-              </p>
-              <p className="text-[11px] text-slate-400 break-words">
-                {p.currentRoute}
-              </p>
-            </div>
-            <div className="bg-slate-950/60 rounded-lg p-2 border border-slate-800">
-              <p className="font-semibold mb-1 text-slate-200 text-[11px]">
-                Proposed route
-              </p>
-              <p className="text-[11px] text-slate-400 break-words">
-                {p.proposedRoute}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-2 mt-3">
-            <button
-              className="btn text-xs"
-              onClick={() => handleDecision(p.id, "approve")}
-            >
-              Approve reroute
-            </button>
-            <button
-              className="btn-secondary text-xs"
-              onClick={() => handleDecision(p.id, "reject")}
-            >
-              Reject
-            </button>
-          </div>
         </div>
-      ))}
+        <button
+          type="button"
+          disabled={!hasProposals || isApplying}
+          onClick={onApproveAll}
+          className={`btn text-xs ${
+            !hasProposals || isApplying
+              ? "opacity-50 cursor-not-allowed"
+              : ""
+          }`}
+        >
+          {isApplying ? "Applying…" : "Approve & Apply All"}
+        </button>
+      </header>
+
+      {!hasProposals && (
+        <p className="text-xs text-slate-500">
+          No reroutes required for the current sector conditions. Select a
+          different emergency scenario to stress the system.
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {proposals.map((p) => (
+          <div
+            key={p.id}
+            className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-medium text-slate-100">
+                {p.callsign} · {p.flightId}
+              </div>
+              <div className="flex items-center gap-2">
+                <RiskBadge value={p.riskBefore} />
+                <span className="text-slate-500">→</span>
+                <RiskBadge value={p.riskAfter} />
+              </div>
+            </div>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              <div>
+                <div className="text-[10px] uppercase text-slate-500">
+                  Current route
+                </div>
+                <div className="mt-0.5 text-[11px] text-slate-200">
+                  {p.currentRoute}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase text-slate-500">
+                  Proposed route
+                </div>
+                <div className="mt-0.5 text-[11px] text-emerald-200">
+                  {p.proposedRoute}
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-2 text-[11px] text-slate-400">
+              {p.reason}
+            </p>
+
+            <p className="mt-1 text-[10px] text-slate-500">
+              Proposed at {new Date(p.createdAt).toLocaleTimeString()}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
