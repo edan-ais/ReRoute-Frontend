@@ -9,8 +9,6 @@ import type { Flight } from "../lib/types";
 
 interface FlightMapProps {
   flights: Flight[];
-  simulatedFlights?: Flight[];
-  mode: "live" | "simulated";
 }
 
 const planeIcon = new L.Icon({
@@ -20,12 +18,10 @@ const planeIcon = new L.Icon({
   popupAnchor: [0, -14]
 });
 
-export default function FlightMap({ flights, simulatedFlights, mode }: FlightMapProps) {
-  const activeFlights = mode === "live" ? flights : simulatedFlights ?? flights;
-
+export default function FlightMap({ flights }: FlightMapProps) {
   const routes = useMemo(
     () =>
-      activeFlights.map((f) => ({
+      flights.map((f) => ({
         id: f.id,
         positions:
           f.path ??
@@ -34,13 +30,13 @@ export default function FlightMap({ flights, simulatedFlights, mode }: FlightMap
             [f.latitude + 1, f.longitude + 1]
           ] as [number, number][])
       })),
-    [activeFlights]
+    [flights]
   );
 
   return (
     <div className="h-full w-full rounded-xl overflow-hidden border border-slate-800">
       <MapContainer
-        center={[35.0, -118.0]} // Southwest / California focus
+        center={[35.0, -118.0]} // Southwest / California
         zoom={5}
         scrollWheelZoom={false}
         style={{ height: "100%", width: "100%" }}
@@ -56,14 +52,14 @@ export default function FlightMap({ flights, simulatedFlights, mode }: FlightMap
           <Polyline
             key={r.id}
             positions={r.positions}
-            color={mode === "live" ? "#3b82f6" : "#22c55e"}
+            color="#3b82f6"
             weight={3}
             opacity={0.85}
           />
         ))}
 
         {/* Aircraft markers */}
-        {activeFlights.map((f) => (
+        {flights.map((f) => (
           <Marker
             key={f.id}
             icon={planeIcon}
@@ -75,7 +71,9 @@ export default function FlightMap({ flights, simulatedFlights, mode }: FlightMap
                 <br />
                 {f.origin} → {f.destination}
                 <br />
-                {(f.originName || "Unknown origin") + " → " + (f.destinationName || "Unknown destination")}
+                {(f.originName || "Unknown origin") +
+                  " → " +
+                  (f.destinationName || "Unknown destination")}
                 <br />
                 {f.latitude.toFixed(2)}°, {f.longitude.toFixed(2)}°
                 <br />
@@ -89,3 +87,4 @@ export default function FlightMap({ flights, simulatedFlights, mode }: FlightMap
     </div>
   );
 }
+
