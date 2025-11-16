@@ -1,14 +1,13 @@
 // app/flights/page.tsx
 "use client";
 
-// ⛔ IMPORTANT: Prevent Next.js + Netlify from SSR or prerendering this page
 export const dynamic = "force-dynamic";
 
 import { useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 
-// ⛔ IMPORTANT: FlightMap must be dynamically imported client-side only
-const FlightMap = dynamic(() => import("../../components/FlightMap"), {
+// FlightMap must be dynamically imported client-side only (Leaflet-safe)
+const FlightMap = nextDynamic(() => import("../../components/FlightMap"), {
   ssr: false
 });
 
@@ -57,8 +56,7 @@ function buildConditionsForScenario(
           type: "weather",
           label: "Convective SIGMET",
           severity: "high",
-          description:
-            "Thunderstorm activity along the central corridor.",
+          description: "Thunderstorm activity along the central corridor.",
           active: true
         }
       ];
@@ -69,8 +67,7 @@ function buildConditionsForScenario(
           type: "runway",
           label: "Runway 27 Closed",
           severity: "medium",
-          description:
-            "Primary arrival runway at hub unavailable.",
+          description: "Primary arrival runway at hub unavailable.",
           active: true
         }
       ];
@@ -81,8 +78,7 @@ function buildConditionsForScenario(
           type: "staffing",
           label: "Reduced Staffing",
           severity: "medium",
-          description:
-            "Sector staffed with reduced positions.",
+          description: "Sector staffed with reduced positions.",
           active: true
         }
       ];
@@ -173,7 +169,7 @@ export default function FlightsPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [mode, setMode] = useState<"live" | "simulated">("live");
 
-  // === LIVE DATA LOADING LOOP ===
+  // Live data loading loop
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
@@ -211,7 +207,7 @@ export default function FlightsPage() {
     };
   }, []);
 
-  // === RISK UPDATE WHEN SCENARIO CHANGES ===
+  // Recompute risk when scenario changes
   useEffect(() => {
     const scenario =
       EMERGENCY_SCENARIOS.find((s) => s.id === scenarioId) ??
@@ -224,7 +220,7 @@ export default function FlightsPage() {
     );
   }, [scenarioId]);
 
-  // === GENERATE REROUTE PROPOSALS ===
+  // Generate reroute proposals whenever flights or scenario change
   useEffect(() => {
     setProposals(generateRerouteProposals(flights, scenarioId));
   }, [flights, scenarioId]);
@@ -249,7 +245,7 @@ export default function FlightsPage() {
 
     setIsApplying(true);
 
-    // Update risk + route
+    // Apply proposed routes and reduced risk
     setFlights((prev) =>
       prev.map((f) => {
         const p = proposals.find((p) => p.flightId === f.id);
@@ -258,15 +254,14 @@ export default function FlightsPage() {
       })
     );
 
-    // Apply reroute proposals
     setProposals((prev) => prev.map((p) => ({ ...p, applied: true })));
 
-    // Generate simulated positions
+    // Generate simulated positions to visualize reroutes on the map
     setSimulatedFlights(
       flights.map((f, idx) => {
         const p = proposals.find((p) => p.flightId === f.id);
         if (!p) return f;
-        const offset = (idx % 3) - 1;
+        const offset = (idx % 3) - 1; // -1, 0, 1
         return {
           ...f,
           latitude: f.latitude + offset * 1.2,
@@ -288,7 +283,7 @@ export default function FlightsPage() {
 
   return (
     <div className="space-y-4">
-      {/* HEADER */}
+      {/* Header */}
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -309,13 +304,15 @@ export default function FlightsPage() {
 
           {lastUpdated && (
             <span>
-              Last update <span className="text-slate-200">{lastUpdated}</span>
+              Last update{" "}
+              <span className="text-slate-200">{lastUpdated}</span>
             </span>
           )}
 
-          {/* LIVE / SIM TOGGLE */}
+          {/* Live / Simulated toggle */}
           <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-1 py-0.5">
             <button
+              type="button"
               onClick={() => setMode("live")}
               className={`rounded-full px-2 py-0.5 text-[11px] ${
                 mode === "live"
@@ -325,8 +322,8 @@ export default function FlightsPage() {
             >
               Live
             </button>
-
             <button
+              type="button"
               onClick={() => simulatedFlights && setMode("simulated")}
               disabled={!simulatedFlights}
               className={`rounded-full px-2 py-0.5 text-[11px] ${
@@ -343,11 +340,10 @@ export default function FlightsPage() {
         </div>
       </header>
 
-      {/* MAIN GRID */}
+      {/* Main layout */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.2fr)]">
-        {/* LEFT SIDE */}
+        {/* Left: Map + flights */}
         <div className="space-y-4">
-          {/* MAP */}
           <div className="card h-[360px] md:h-[420px]">
             <div className="mb-3 flex items-center justify-between text-sm">
               <h2 className="font-medium">Sector Map</h2>
@@ -363,7 +359,6 @@ export default function FlightsPage() {
             />
           </div>
 
-          {/* FLIGHT LIST */}
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <h2 className="font-medium">Active Flights</h2>
@@ -371,7 +366,6 @@ export default function FlightsPage() {
                 Select a flight to inspect airports and position.
               </span>
             </div>
-
             <div className="grid gap-3 md:grid-cols-2">
               {flights.map((flight) => (
                 <FlightCard
@@ -379,8 +373,8 @@ export default function FlightsPage() {
                   flight={flight}
                   selected={flight.id === selectedFlightId}
                   onSelect={() =>
-                    setSelectedFlightId((p) =>
-                      p === flight.id ? null : flight.id
+                    setSelectedFlightId((prev) =>
+                      prev === flight.id ? null : flight.id
                     )
                   }
                 />
@@ -389,9 +383,8 @@ export default function FlightsPage() {
           </div>
         </div>
 
-        {/* RIGHT SIDE */}
+        {/* Right: conditions + approvals */}
         <div className="space-y-4">
-          {/* CONDITIONS */}
           <div className="card">
             <ConditionsPanel
               scenarios={EMERGENCY_SCENARIOS}
@@ -404,7 +397,6 @@ export default function FlightsPage() {
             />
           </div>
 
-          {/* APPROVALS */}
           <div className="card">
             <ApprovalPanel
               proposals={proposals}
