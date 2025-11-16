@@ -1,24 +1,26 @@
-interface Props {
-  score: number; // 0–1
+// components/RiskBadge.tsx
+"use client";
+
+interface RiskBadgeProps {
+  value: number;
 }
 
-export default function RiskBadge({ score }: Props) {
-  let label = "Low";
-  let color = "bg-emerald-500/20 text-emerald-300";
-  if (score >= 0.7) {
-    label = "High";
-    color = "bg-rose-500/20 text-rose-300";
-  } else if (score >= 0.4) {
-    label = "Medium";
-    color = "bg-amber-500/20 text-amber-300";
+export default function RiskBadge({ value }: RiskBadgeProps) {
+  const risk = Math.round(value * 100);
+
+  let color = "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
+  if (risk >= 70) {
+    color = "bg-red-500/15 text-red-300 border-red-500/40";
+  } else if (risk >= 40) {
+    color = "bg-amber-500/15 text-amber-300 border-amber-500/40";
   }
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${color}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${color}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {label} · {(score * 100).toFixed(0)}%
+      Risk {risk}
     </span>
   );
 }
