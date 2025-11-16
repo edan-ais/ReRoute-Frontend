@@ -64,7 +64,7 @@ function buildConditionsForScenario(
         {
           id: "cond-rwy-1",
           type: "runway",
-          label: "Runway 27 Closed",
+          label: "Runway 25R Closed",
           severity: "medium",
           description: "Primary arrival runway at hub unavailable.",
           active: true
@@ -77,7 +77,7 @@ function buildConditionsForScenario(
           type: "staffing",
           label: "Reduced Staffing",
           severity: "medium",
-          description: "Sector staffed with reduced positions.",
+          description: "Sector staffed with reduced controller positions.",
           active: true
         }
       ];
@@ -112,16 +112,41 @@ function computeRisk(flight: Flight, scenarioId: EmergencyScenarioId): number {
   return Number(Math.max(0, Math.min(1, risk)).toFixed(2));
 }
 
+// Very simple ICAO-style FPL you can read out as ATC
+function buildIcaoFlightPlan(
+  flight: Flight,
+  route: string,
+  overriddenCruiseLevel?: string
+): string {
+  const dep = flight.origin;
+  const dest = flight.destination;
+  const callsign = flight.callsign;
+  const type = "B738/M"; // synthetic aircraft type
+  const equipment = "SDFGIRWY/S";
+  const speed = `N0${Math.round(flight.speedKts / 10) * 10}`;
+  const level = overriddenCruiseLevel ?? `F${Math.round(flight.altitude / 1000) * 10}`;
+
+  // Compressed but ATC-readable
+  return [
+    `FPL-${callsign}-IS`,
+    `-C/${type}-${equipment}`,
+    `-${dep}0800`,
+    `-${speed}${level} ${route}`,
+    `-${dest}0200`,
+    `-DOF/250115`
+  ].join("\n");
+}
+
 function generateRerouteProposals(
   flights: Flight[],
   scenarioId: EmergencyScenarioId
 ): RerouteProposal[] {
   const reasonsByScenario: Record<EmergencyScenarioId, string> = {
-    wx: "Route avoids the convective corridor while preserving arrival slots.",
+    wx: "Routes avoid the convective corridor while preserving arrival slots.",
     runway:
-      "Route steers arrivals to secondary runway and reduces vectoring time.",
+      "Routes steer arrivals to secondary runways and reduce vectoring time.",
     staffing:
-      "Route offloads traffic toward adjacent sector to reduce controller load."
+      "Routes offload traffic toward adjacent sectors to reduce controller load."
   };
 
   const reason = reasonsByScenario[scenarioId];
@@ -130,14 +155,28 @@ function generateRerouteProposals(
     .filter((f) => f.riskScore >= 0.6)
     .map((flight, idx) => {
       const riskAfter = Number((flight.riskScore * 0.4).toFixed(2));
+
+      const baseRoute =
+        flight.route ||
+        `${flight.origin} DCT FIX${idx + 1} ${flight.destination}`;
+
+      // Inject a simple “reroute” fix into the route string
+      const rerouteFix = `REROUTE${idx + 1}`;
+      const proposedRoute = baseRoute.includes("DCT")
+        ? baseRoute.replace("DCT", `DCT ${rerouteFix} DCT`)
+        : `${flight.origin} DCT ${rerouteFix} DCT ${flight.destination}`;
+
+      const icaoBefore = buildIcaoFlightPlan(flight, baseRoute);
+      const icaoAfter = buildIcaoFlightPlan(flight, proposedRoute, "F310");
+
       return {
         id: `prop-${flight.id}`,
         flightId: flight.id,
         callsign: flight.callsign,
-        currentRoute:
-          flight.route ||
-          `${flight.origin} DCT DIRECT${idx + 1} ${flight.destination}`,
-        proposedRoute: `${flight.origin} DCT REROUTE${idx + 1} ${flight.destination}`,
+        currentRoute: baseRoute,
+        proposedRoute,
+        icaoBefore,
+        icaoAfter,
         riskBefore: flight.riskScore,
         riskAfter,
         reason,
@@ -149,19 +188,13 @@ function generateRerouteProposals(
 
 export default function FlightsPage() {
   const [flights, setFlights] = useState<Flight[]>([]);
-  const [simulatedFlights, setSimulatedFlights] = useState<Flight[] | null>(
-    null
-  );
-  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(
-    null
-  );
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [scenarioId, setScenarioId] =
     useState<EmergencyScenarioId>("wx");
   const [conditions, setConditions] = useState<Condition[]>([]);
   const [proposals, setProposals] = useState<RerouteProposal[]>([]);
   const [isApplying, setIsApplying] = useState(false);
   const [tickTime, setTickTime] = useState<string | null>(null);
-  const [mode, setMode] = useState<"live" | "simulated">("live");
 
   // Initialize synthetic flights + start animation loop
   useEffect(() => {
@@ -170,12 +203,11 @@ export default function FlightsPage() {
 
     const initial = createSyntheticFlights();
     if (isMounted) {
-      setFlights(
-        initial.map((f) => ({
-          ...f,
-          riskScore: computeRisk({ ...f }, scenarioId)
-        }))
-      );
+      const withRisk = initial.map((f) => ({
+        ...f,
+        riskScore: computeRisk({ ...f }, scenarioId)
+      }));
+      setFlights(withRisk);
       setTickTime(new Date().toLocaleTimeString());
     }
 
@@ -230,8 +262,6 @@ export default function FlightsPage() {
 
   const handleScenarioChange = (id: EmergencyScenarioId) => {
     setScenarioId(id);
-    setMode("live");
-    setSimulatedFlights(null);
   };
 
   const handleApproveAll = () => {
@@ -243,26 +273,15 @@ export default function FlightsPage() {
       prev.map((f) => {
         const p = proposals.find((p) => p.flightId === f.id);
         if (!p) return f;
-        return { ...f, route: p.proposedRoute, riskScore: p.riskAfter };
-      })
-    );
-
-    setProposals((prev) => prev.map((p) => ({ ...p, applied: true })));
-
-    setSimulatedFlights(
-      flights.map((f, idx) => {
-        const p = proposals.find((p) => p.flightId === f.id);
-        if (!p) return f;
-        const offset = (idx % 3) - 1;
         return {
           ...f,
-          latitude: f.latitude + offset * 0.7,
-          longitude: f.longitude + offset * 1.1
+          route: p.proposedRoute,
+          riskScore: p.riskAfter
         };
       })
     );
 
-    setMode("simulated");
+    setProposals((prev) => prev.map((p) => ({ ...p, applied: true })));
 
     setTimeout(() => setIsApplying(false), 400);
   };
@@ -298,33 +317,6 @@ export default function FlightsPage() {
               Last tick <span className="text-slate-200">{tickTime}</span>
             </span>
           )}
-          <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-1 py-0.5">
-            <button
-              type="button"
-              onClick={() => setMode("live")}
-              className={`rounded-full px-2 py-0.5 text-[11px] ${
-                mode === "live"
-                  ? "bg-slate-100 text-slate-900"
-                  : "text-slate-300"
-              }`}
-            >
-              Live
-            </button>
-            <button
-              type="button"
-              onClick={() => simulatedFlights && setMode("simulated")}
-              disabled={!simulatedFlights}
-              className={`rounded-full px-2 py-0.5 text-[11px] ${
-                mode === "simulated"
-                  ? "bg-slate-100 text-slate-900"
-                  : !simulatedFlights
-                  ? "text-slate-500"
-                  : "text-slate-300"
-              }`}
-            >
-              Simulated
-            </button>
-          </div>
         </div>
       </header>
 
@@ -340,11 +332,7 @@ export default function FlightsPage() {
               </span>
             </div>
 
-            <FlightMap
-              flights={flights}
-              simulatedFlights={simulatedFlights || undefined}
-              mode={mode}
-            />
+            <FlightMap flights={flights} />
           </div>
 
           <div className="space-y-3">
