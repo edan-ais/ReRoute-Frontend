@@ -1,56 +1,34 @@
-// lib/types.ts
-
-export type FlightPhase =
-  | "climb"
-  | "cruise"
-  | "descent"
-  | "approach"
-  | "taxi"
-  | "parked";
-
-export type FlightStatus =
-  | "scheduled"
-  | "enroute"
-  | "landed"
-  | "delayed"
-  | "cancelled";
+export interface Airport {
+  code: string;
+  name: string;
+  lat: number;
+  lon: number;
+}
 
 export interface Flight {
   id: string;
   callsign: string;
   origin: string;
   destination: string;
-  originName?: string;
-  destinationName?: string;
-
-  status: FlightStatus;
-  phase: FlightPhase;
-
-  latitude: number;
-  longitude: number;
+  status: string;
+  phase: string;
   altitude: number;
   speedKts: number;
-
+  latitude: number;
+  longitude: number;
   riskScore: number;
+  isEmergency: boolean;
+  frozen: boolean;
+  path: { lat: number; lon: number }[];
+  progress: number;
   route?: string;
-
-  // Synthetic animation
-  path?: [number, number][];
-  progress?: number;
-
-  isEmergency?: boolean;
-
-  frozen?: boolean; // ⛔ after approval, route/risk never changes
 }
-
-export type ConditionType = "weather" | "traffic" | "staffing" | "runway";
-export type ConditionSeverity = "low" | "medium" | "high";
 
 export interface Condition {
   id: string;
-  type: ConditionType;
+  type: "weather" | "staffing" | "runway";
   label: string;
-  severity: ConditionSeverity;
+  severity: "low" | "medium" | "high";
   description: string;
   active: boolean;
 }
@@ -61,25 +39,21 @@ export interface EmergencyScenario {
   id: EmergencyScenarioId;
   name: string;
   description: string;
-  type: ConditionType;
+  type: "weather" | "runway" | "staffing";
 }
 
 export interface RerouteProposal {
   id: string;
   flightId: string;
   callsign: string;
-
   currentRoute: string;
   proposedRoute: string;
-
   icaoBefore: string;
   icaoAfter: string;
-
   riskBefore: number;
   riskAfter: number;
-
   reason: string;
   createdAt: string;
-  applied?: boolean;
+  applied: boolean;
 }
 
