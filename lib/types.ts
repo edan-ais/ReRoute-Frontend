@@ -18,24 +18,31 @@ export type FlightStatus =
 export interface Flight {
   id: string;
   callsign: string;
-  origin: string; // ICAO code (e.g. KLAX)
-  destination: string; // ICAO code (e.g. KSFO)
+  origin: string;
+  destination: string;
   originName?: string;
   destinationName?: string;
+
   status: FlightStatus;
   phase: FlightPhase;
+
   latitude: number;
   longitude: number;
   altitude: number;
   speedKts: number;
-  riskScore: number;
-  route?: string; // route string for map + display
 
-  // Synthetic path & animation progress along that path
+  riskScore: number;
+  route?: string;
+
+  // Path + animation
   path?: [number, number][];
   progress?: number;
 
+  // Emergency flag
   isEmergency?: boolean;
+
+  // ⛔ After approval, frozen means nothing changes risk/route anymore
+  frozen?: boolean;
 }
 
 export type ConditionType = "weather" | "traffic" | "staffing" | "runway";
@@ -59,21 +66,21 @@ export interface EmergencyScenario {
   type: ConditionType;
 }
 
+// ICAO flight plan fields are required
 export interface RerouteProposal {
   id: string;
   flightId: string;
   callsign: string;
 
-  // Simple route strings
   currentRoute: string;
   proposedRoute: string;
 
-  // ICAO-style “physical” flight plans you can read like ATC
   icaoBefore: string;
   icaoAfter: string;
 
   riskBefore: number;
   riskAfter: number;
+
   reason: string;
   createdAt: string;
   applied?: boolean;
