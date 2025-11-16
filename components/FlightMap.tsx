@@ -1,90 +1,99 @@
 // components/FlightMap.tsx
 "use client";
 
-import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from "react-leaflet";
-import L from "leaflet";
-import { useMemo } from "react";
+import React from "react";
+import { MapContainer, TileLayer, Polyline, CircleMarker, Polygon } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Flight } from "../lib/types";
+
+import type { Flight, HazardZone } from "../lib/types";
 
 interface FlightMapProps {
   flights: Flight[];
+  selectedFlightId?: string | null;
+  hazardZones?: HazardZone[];
 }
 
-const planeIcon = new L.Icon({
-  iconUrl: "/icons/airplane.svg",
-  iconSize: [28, 28],
-  iconAnchor: [14, 14],
-  popupAnchor: [0, -14]
-});
+const DEFAULT_CENTER: [number, number] = [34.2, -118.2]; // SoCal-ish
 
-export default function FlightMap({ flights }: FlightMapProps) {
-  const routes = useMemo(
-    () =>
-      flights.map((f) => ({
-        id: f.id,
-        positions:
-          f.path ??
-          ([
-            [f.latitude - 1, f.longitude - 1],
-            [f.latitude + 1, f.longitude + 1]
-          ] as [number, number][])
-      })),
-    [flights]
-  );
+export default function FlightMap({
+  flights,
+  selectedFlightId,
+  hazardZones = [],
+}: FlightMapProps) {
+  const center: [number, number] =
+    flights.length > 0
+      ? [flights[0].latitude, flights[0].longitude]
+      : DEFAULT_CENTER;
 
   return (
-    <div className="h-full w-full rounded-xl overflow-hidden border border-slate-800">
-      <MapContainer
-        center={[35.0, -118.0]} // Southwest / California
-        zoom={5}
-        scrollWheelZoom={false}
-        style={{ height: "100%", width: "100%" }}
-        className="bg-slate-900"
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    <MapContainer
+      center={center}
+      zoom={6}
+      className="h-full w-full rounded-xl overflow-hidden"
+    >
+      <TileLayer
+        attribution='&copy; OpenStreetMap contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      {/* HAZARD ZONES */}
+      {hazardZones.map((zone) => (
+        <Polygon
+          key={zone.id}
+          positions={zone.polygon.map((p) => [p.lat, p.lon] as [number, number])}
+          pathOptions={{
+            color:
+              zone.severity === "high"
+                ? "#ef4444" // red
+                : zone.severity === "medium"
+                ? "#f97316" // orange
+                : "#22c55e", // green
+            weight: 2,
+            fillOpacity: 0.18,
+          }}
         />
+      ))}
 
-        {/* Curved flight paths */}
-        {routes.map((r) => (
-          <Polyline
-            key={r.id}
-            positions={r.positions}
-            color="#3b82f6"
-            weight={3}
-            opacity={0.85}
-          />
-        ))}
+      {/* FLIGHT PATHS + PLANES */}
+      {flights.map((f) => {
+        const pathLatLngs =
+          f.path && f.path.length > 0
+            ? (f.path.map((p) => [p.lat, p.lon] as [number, number]))
+            : ([ [f.latitude, f.longitude] ] as [number, number][]);
 
-        {/* Aircraft markers */}
-        {flights.map((f) => (
-          <Marker
-            key={f.id}
-            icon={planeIcon}
-            position={[f.latitude, f.longitude]}
-          >
-            <Tooltip direction="top">
-              <div>
-                <strong>{f.callsign}</strong>
-                <br />
-                {f.origin} → {f.destination}
-                <br />
-                {(f.originName || "Unknown origin") +
-                  " → " +
-                  (f.destinationName || "Unknown destination")}
-                <br />
-                {f.latitude.toFixed(2)}°, {f.longitude.toFixed(2)}°
-                <br />
-                Alt: {Math.round(f.altitude).toLocaleString()} ft ·{" "}
-                {Math.round(f.speedKts)} kts
-              </div>
-            </Tooltip>
-          </Marker>
-        ))}
-      </MapContainer>
-    </div>
+        const isSelected = f.id === selectedFlightId;
+
+        const color = f.frozen
+          ? "#22c55e" // approved / resolved = green
+          : f.riskScore >= 0.6
+          ? "#ef4444" // high risk
+          : f.riskScore >= 0.4
+          ? "#f97316" // medium risk
+          : "#38bdf8"; // low risk / nominal
+
+        return (
+          <React.Fragment key={f.id}>
+            <Polyline
+              positions={pathLatLngs}
+              pathOptions={{
+                color,
+                weight: isSelected ? 4 : 2,
+                opacity: 0.9,
+              }}
+            />
+            <CircleMarker
+              center={[f.latitude, f.longitude]}
+              radius={isSelected ? 6 : 4}
+              pathOptions={{
+                color,
+                fillColor: color,
+                fillOpacity: 1,
+              }}
+            />
+          </React.Fragment>
+        );
+      })}
+    </MapContainer>
   );
 }
 
