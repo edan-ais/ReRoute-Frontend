@@ -1,22 +1,20 @@
 import type { Airport, Flight } from "./types";
 
 // ---------------------------------------------------------
-// Interpolation helper
+// Linear interpolation
 // ---------------------------------------------------------
 function interpolate(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
 // ---------------------------------------------------------
-// Interpolate along a multi-point path
+// Interpolate position along a multi-point path
 // ---------------------------------------------------------
 export function interpolatePath(
   path: { lat: number; lon: number }[],
   t: number
 ): { lat: number; lon: number } {
-  if (path.length < 2) {
-    return path[0];
-  }
+  if (path.length < 2) return path[0];
 
   const segCount = path.length - 1;
   const segFloat = t * segCount;
@@ -33,15 +31,15 @@ export function interpolatePath(
 }
 
 // ---------------------------------------------------------
-// Generate a naturally bent synthetic initial flight path
+// Synthetic initial flight path generator
 // ---------------------------------------------------------
 export function generateRandomPath(
   origin: Airport,
   dest: Airport
 ): { lat: number; lon: number }[] {
-  // One random curve
   const midLat =
     (origin.lat + dest.lat) / 2 + (Math.random() * 2 - 1) * 0.8;
+
   const midLon =
     (origin.lon + dest.lon) / 2 + (Math.random() * 2 - 1) * 0.8;
 
@@ -53,7 +51,7 @@ export function generateRandomPath(
 }
 
 // ---------------------------------------------------------
-// Build the NEW rerouted path with controlled curvature
+// Curved reroute path (applied after approval)
 // ---------------------------------------------------------
 export function buildCurvedPath(
   origin: Airport,
@@ -63,7 +61,6 @@ export function buildCurvedPath(
   const midLat = (origin.lat + dest.lat) / 2;
   const midLon = (origin.lon + dest.lon) / 2;
 
-  // Apply bend factor: push the midpoint off the direct great-circle
   const newMidLat = midLat + bendFactor * 1.2;
   const newMidLon = midLon - bendFactor * 1.2;
 
@@ -75,24 +72,18 @@ export function buildCurvedPath(
 }
 
 // ---------------------------------------------------------
-// Step flight positions forward along their path
+// Move flights forward along their paths
 // ---------------------------------------------------------
 export function stepFlights(prevFlights: Flight[]): Flight[] {
-  const delta = 0.02; // movement per tick
+  const delta = 0.02; // animation speed
 
   return prevFlights.map((f) => {
-    // Never modify approved flights (they should not re-route)
-    if (f.frozen) {
-      return f;
-    }
+    // Approved flight → never overwrite path or progress
+    if (f.frozen) return f;
 
-    // No usable path
-    if (!f.path || f.path.length < 2) {
-      return f;
-    }
+    if (!f.path || f.path.length < 2) return f;
 
     const nextProgress = (f.progress + delta) % 1;
-
     const pos = interpolatePath(f.path, nextProgress);
 
     return {
@@ -100,7 +91,6 @@ export function stepFlights(prevFlights: Flight[]): Flight[] {
       progress: nextProgress,
       latitude: pos.lat,
       longitude: pos.lon,
-      // A tiny altitude oscillation to simulate motion
       altitude: f.altitude + Math.sin(nextProgress * Math.PI * 2) * 200,
     };
   });
