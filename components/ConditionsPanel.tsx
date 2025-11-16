@@ -31,14 +31,9 @@ export default function ConditionsPanel({
       <header className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium">Emergencies & Conditions</h2>
-          <p className="text-xs text-slate-400">
-            Click through three live scenarios; risk and reroutes adapt in real
-            time.
-          </p>
         </div>
       </header>
 
-      {/* Scenario toggle chips */}
       <div className="flex flex-wrap gap-2">
         {scenarios.map((scenario) => {
           const active = scenario.id === activeScenarioId;
@@ -66,7 +61,6 @@ export default function ConditionsPanel({
         })}
       </div>
 
-      {/* Topline stats */}
       <div className="grid grid-cols-3 gap-3 text-xs">
         <div className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">
           <div className="text-slate-400">Flights tracked</div>
@@ -88,7 +82,6 @@ export default function ConditionsPanel({
         </div>
       </div>
 
-      {/* Active conditions list */}
       <div className="space-y-2">
         {conditions.map((cond) => (
           <div
@@ -118,3 +111,4 @@ export default function ConditionsPanel({
     </div>
   );
 }
+
