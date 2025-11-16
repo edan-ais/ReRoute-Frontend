@@ -1,4 +1,5 @@
 // lib/sim.ts
+
 import type { Flight } from "./types";
 
 interface Airport {
@@ -17,7 +18,7 @@ const AIRPORTS: Airport[] = [
   { code: "KPHX", name: "Phoenix Sky Harbor", lat: 33.4342, lon: -112.0116 }
 ];
 
-// Predefined flows
+// parallel to flight list
 const ROUTES: [string, string][] = [
   ["KLAX", "KSFO"],
   ["KSAN", "KLAX"],
@@ -28,69 +29,75 @@ const ROUTES: [string, string][] = [
   ["KSFO", "KLAX"],
   ["KPHX", "KLAX"],
   ["KSMF", "KSAN"],
-  ["KLAS", "KSAN"]
+  ["KLAS", "KSAN"],
 ];
 
 function findAirport(code: string): Airport {
   return AIRPORTS.find(a => a.code === code) ?? AIRPORTS[0];
 }
 
-function segLen(a: [number, number], b: [number, number]): number {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  return Math.sqrt(dx * dx + dy * dy);
+function length(a: [number, number], b: [number, number]): number {
+  return Math.sqrt(Math.pow(b[0] - a[0], 2) + Math.pow(b[1] - a[1], 2));
 }
 
-// Path interpolation
+// Polyline interpolation
 function interpolate(path: [number, number][], t: number) {
   if (path.length < 2) return { lat: path[0][0], lon: path[0][1] };
 
+  const segs = path.length - 1;
   const total = path
-    .slice(0, -1)
-    .reduce((sum, p, idx) => sum + segLen(p, path[idx + 1]), 0);
+    .slice(0, segs)
+    .reduce((s, p, i) => s + length(p, path[i + 1]), 0);
 
   let dist = t * total;
   let acc = 0;
 
-  for (let i = 0; i < path.length - 1; i++) {
+  for (let i = 0; i < segs; i++) {
     const a = path[i];
     const b = path[i + 1];
-    const len = segLen(a, b);
+    const segLen = length(a, b);
 
-    if (acc + len >= dist) {
-      const tt = (dist - acc) / len;
+    if (acc + segLen >= dist) {
+      const p = (dist - acc) / segLen;
       return {
-        lat: a[0] + tt * (b[0] - a[0]),
-        lon: a[1] + tt * (b[1] - a[1])
+        lat: a[0] + p * (b[0] - a[0]),
+        lon: a[1] + p * (b[1] - a[1]),
       };
     }
-    acc += len;
+    acc += segLen;
   }
 
   const last = path[path.length - 1];
   return { lat: last[0], lon: last[1] };
 }
 
-// Curved 3-point path
-function curved(origin: Airport, dest: Airport, curveDir: number) {
-  const midLat = (origin.lat + dest.lat) / 2 + curveDir * 1.2;
-  const midLon = (origin.lon + dest.lon) / 2 + curveDir * 0.6;
+// Build a simple curved 3-point path
+export function buildCurvedPath(
+  origin: Airport,
+  dest: Airport,
+  curve: number
+): [number, number][] {
+  const mid: [number, number] = [
+    (origin.lat + dest.lat) / 2 + curve,
+    (origin.lon + dest.lon) / 2 + curve * 0.6,
+  ];
 
   return [
     [origin.lat, origin.lon],
-    [midLat, midLon],
-    [dest.lat, dest.lon]
-  ] as [number, number][];
+    mid,
+    [dest.lat, dest.lon],
+  ];
 }
 
+// INITIAL synthetic flights
 export function createSyntheticFlights(): Flight[] {
   return ROUTES.map(([o, d], i) => {
     const orig = findAirport(o);
     const dest = findAirport(d);
 
-    const path = curved(orig, dest, i % 2 === 0 ? 1 : -1);
-    const progress = 0.1 + i * 0.08;
-    const pos = interpolate(path, progress);
+    const initialPath = buildCurvedPath(orig, dest, i % 2 === 0 ? 1.2 : -1.2);
+    const prog = 0.15 + i * 0.07;
+    const pos = interpolate(initialPath, prog);
 
     return {
       id: `FL${i + 1}`,
@@ -99,38 +106,39 @@ export function createSyntheticFlights(): Flight[] {
       destination: d,
       originName: orig.name,
       destinationName: dest.name,
+
       status: "enroute",
       phase: "cruise",
+
       latitude: pos.lat,
       longitude: pos.lon,
-      altitude: 30000 + i * 500,
-      speedKts: 440 + (i % 3) * 12,
+      altitude: 30000 + i * 400,
+      speedKts: 430 + (i % 3) * 15,
+
       riskScore: 0.3,
       route: `${o} DCT FIX${i + 1} ${d}`,
-      path,
-      progress,
-      isEmergency: false,
+
+      path: initialPath,
+      progress: prog,
       frozen: false
     };
   });
 }
 
-// After approval: frozen = true means NEVER change route/risk again
-export function stepFlights(prev: Flight[]) {
+// AFTER APPROVAL → flights can still move but not change path/risk
+export function stepFlights(prev: Flight[]): Flight[] {
   return prev.map(f => {
     if (!f.path || f.path.length < 2) return f;
 
-    // Frozen flights still move, but do NOT change route/risk
-    const prog = (f.progress ?? 0) + 0.01;
-    const next = prog % 1;
-    const pos = interpolate(f.path, next);
+    const nextP = ((f.progress ?? 0) + 0.01) % 1;
+    const pos = interpolate(f.path, nextP);
 
     return {
       ...f,
-      progress: next,
+      progress: nextP,
       latitude: pos.lat,
       longitude: pos.lon,
-      altitude: f.altitude + Math.sin(next * Math.PI * 2) * 200
+      altitude: f.altitude + Math.sin(nextP * Math.PI * 2) * 150
     };
   });
 }
