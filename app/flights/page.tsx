@@ -24,7 +24,8 @@ import type {
 
 import {
   createSyntheticFlights,
-  stepFlights
+  stepFlights,
+  buildCurvedPath
 } from "../../lib/sim";
 
 const SCENARIOS: EmergencyScenario[] = [
@@ -33,8 +34,8 @@ const SCENARIOS: EmergencyScenario[] = [
   { id: "staffing", name: "Staffing Shortage", description: "", type: "staffing" }
 ];
 
-function buildConditions(s: EmergencyScenario): Condition[] {
-  switch (s.id) {
+function buildConditions(id: EmergencyScenarioId): Condition[] {
+  switch (id) {
     case "wx":
       return [
         {
@@ -42,7 +43,7 @@ function buildConditions(s: EmergencyScenario): Condition[] {
           type: "weather",
           label: "Convective SIGMET",
           severity: "high",
-          description: "Thunderstorm line across sector.",
+          description: "Thunderstorm corridor in sector.",
           active: true
         }
       ];
@@ -62,9 +63,9 @@ function buildConditions(s: EmergencyScenario): Condition[] {
         {
           id: "st1",
           type: "staffing",
-          label: "Controller Shortage",
+          label: "Reduced Controller Staffing",
           severity: "medium",
-          description: "Reduced staffing workload.",
+          description: "Controller shortage in primary sector.",
           active: true
         }
       ];
@@ -73,19 +74,17 @@ function buildConditions(s: EmergencyScenario): Condition[] {
   }
 }
 
-function computeRisk(f: Flight, scenario: EmergencyScenarioId) {
-  if (f.frozen) return f.riskScore; // IMPORTANT
+function computeRisk(f: Flight, s: EmergencyScenarioId) {
+  if (f.frozen) return f.riskScore;
 
   let r = 0.25;
-
-  if (scenario === "wx" && f.longitude > -120 && f.longitude < -110) r += 0.4;
-  if (scenario === "runway" && ["KLAX","KSFO","KPHX","KLAS"].includes(f.destination)) r += 0.3;
-  if (scenario === "staffing" && f.longitude < -118) r += 0.25;
-
-  return Number(Math.max(0, Math.min(1, r)).toFixed(2));
+  if (s === "wx" && f.longitude > -120 && f.longitude < -110) r += 0.4;
+  if (s === "runway" && ["KLAX","KSFO","KPHX","KLAS"].includes(f.destination)) r += 0.3;
+  if (s === "staffing" && f.longitude < -118) r += 0.25;
+  return Number(Math.min(1, r).toFixed(2));
 }
 
-// ATC-style flight plan text
+// ICAO format
 function icao(f: Flight, route: string, newLevel?: string) {
   const spd = `N0${Math.round(f.speedKts / 10) * 10}`;
   const lvl = newLevel ?? `F${Math.round(f.altitude / 1000) * 10}`;
@@ -100,26 +99,30 @@ function icao(f: Flight, route: string, newLevel?: string) {
   ].join("\n");
 }
 
-function buildProposals(flights: Flight[], s: EmergencyScenarioId, locked: boolean): RerouteProposal[] {
-  if (locked) return []; // IMPORTANT — freeze proposals forever
+function buildProposals(
+  flights: Flight[],
+  scenario: EmergencyScenarioId,
+  locked: boolean
+): RerouteProposal[] {
+  if (locked) return [];
 
   return flights
     .filter(f => f.riskScore >= 0.6)
     .map((f, i) => {
-      const before = f.route ?? `${f.origin} DCT FIX${i+1} ${f.destination}`;
-      const after = before.replace("DCT", `DCT REROUTE${i+1} DCT`);
+      const base = f.route ?? `${f.origin} DCT FIX${i + 1} ${f.destination}`;
+      const rer = base.replace("DCT", `DCT REROUTE${i + 1} DCT`);
 
       return {
         id: `P-${f.id}`,
         flightId: f.id,
         callsign: f.callsign,
-        currentRoute: before,
-        proposedRoute: after,
-        icaoBefore: icao(f, before),
-        icaoAfter: icao(f, after, "F310"),
+        currentRoute: base,
+        proposedRoute: rer,
+        icaoBefore: icao(f, base),
+        icaoAfter: icao(f, rer, "F310"),
         riskBefore: f.riskScore,
         riskAfter: Number((f.riskScore * 0.35).toFixed(2)),
-        reason: "Reroute avoids impact region.",
+        reason: "Avoids impacted region.",
         createdAt: new Date().toISOString(),
         applied: false
       };
@@ -149,10 +152,9 @@ export default function FlightsPage() {
 
   // SCENARIO CHANGE
   useEffect(() => {
-    if (locked) return; // freeze after approval
+    if (locked) return;
 
-    const sc = SCENARIOS.find(s => s.id === scenario)!;
-    setConditions(buildConditions(sc));
+    setConditions(buildConditions(scenario));
     setFlights(prev =>
       prev.map(f => ({
         ...f,
@@ -166,16 +168,16 @@ export default function FlightsPage() {
     setProposals(buildProposals(flights, scenario, locked));
   }, [flights, scenario, locked]);
 
-  // STEP ANIMATION
+  // ANIMATION LOOP
   useEffect(() => {
     const id = setInterval(() => {
       setFlights(prev => stepFlights(prev));
       setTick(new Date().toLocaleTimeString());
-    }, 1500);
+    }, 1600);
     return () => clearInterval(id);
   }, []);
 
-  // APPLY ALL
+  // **APPROVAL HANDLER — this is the critical part**
   const handleApply = () => {
     if (proposals.length === 0) return;
 
@@ -183,14 +185,32 @@ export default function FlightsPage() {
 
     setFlights(prev =>
       prev.map(f => {
-        const p = proposals.find(x => x.flightId === f.id);
+        const p = proposals.find(pp => pp.flightId === f.id);
         if (!p) return f;
+
+        // Build NEW curved path to visibly change line
+        const orig = flights.find(x => x.id === f.id)!;
+        const origAirport = { lat: orig.latitude, lon: orig.longitude }; // current pos midflight
+        const o = { lat: orig.originName ? 0 : 0 }; // preserved for future use
+
+        // Use starting/ending airports
+        const originAp = flights.find(x => x.id === f.id)!.origin;
+        const destAp = flights.find(x => x.id === f.id)!.destination;
+
+        const start = flights.find(x => x.id === f.id)!;
+        const oA = flToAp(start.origin);
+        const dA = flToAp(start.destination);
+
+        // Build NEW route path with different curve
+        const newPath = buildCurvedPath(oA, dA, Math.random() * 1.8 - 0.9);
 
         return {
           ...f,
           frozen: true,
           riskScore: p.riskAfter,
-          route: p.proposedRoute
+          route: p.proposedRoute,
+          path: newPath,
+          progress: 0 // restart animation along new line
         };
       })
     );
@@ -198,38 +218,48 @@ export default function FlightsPage() {
     setProposals(prev => prev.map(p => ({ ...p, applied: true })));
   };
 
-  const riskStats = useMemo(() => {
-    if (!flights.length) return { avg: 0, max: 0 };
-    const vals = flights.map(f => f.riskScore);
+  // Helper to get ICAO airport from code
+  function flToAp(code: string) {
     return {
-      avg: vals.reduce((a, b) => a + b, 0) / vals.length,
-      max: Math.max(...vals)
+      code,
+      lat: {
+        KLAX: 33.9425, KSAN: 32.7338, KSFO: 37.6213,
+        KSMF: 38.6954, KLAS: 36.0840, KPHX: 33.4342
+      }[code]!,
+      lon: {
+        KLAX: -118.4081, KSAN: -117.1933, KSFO: -122.3790,
+        KSMF: -121.5908, KLAS: -115.1537, KPHX: -112.0116
+      }[code]!
+    };
+  }
+
+  const stats = useMemo(() => {
+    if (!flights.length) return { avg: 0, max: 0 };
+    const r = flights.map(f => f.riskScore);
+    return {
+      avg: r.reduce((a, b) => a + b, 0) / r.length,
+      max: Math.max(...r)
     };
   }, [flights]);
 
   return (
     <div className="space-y-4">
-      {/* HEADER */}
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Sector Console</h1>
-        </div>
+        <h1 className="text-2xl font-semibold">Sector Console</h1>
         <div className="text-xs text-slate-400">
           <div className="flex items-center gap-2">
-            <span>Simulation running</span>
+            <span>Simulation active</span>
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           </div>
           <div>Last tick: {tick}</div>
         </div>
       </header>
 
-      {/* GRID */}
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         
-        {/* LEFT: Map + Flights */}
         <div className="space-y-4">
           <div className="card h-[420px]">
-            <div className="mb-2 text-sm font-medium">Sector Map</div>
+            <div className="mb-2 text-sm">Sector Map</div>
             <FlightMap flights={flights} />
           </div>
 
@@ -250,7 +280,6 @@ export default function FlightsPage() {
           </div>
         </div>
 
-        {/* RIGHT: Conditions + Approvals */}
         <div className="space-y-4">
           <div className="card">
             <ConditionsPanel
@@ -258,8 +287,8 @@ export default function FlightsPage() {
               activeScenarioId={scenario}
               onScenarioChange={id => !locked && setScenario(id)}
               conditions={conditions}
-              averageRisk={riskStats.avg}
-              maxRisk={riskStats.max}
+              averageRisk={stats.avg}
+              maxRisk={stats.max}
               totalFlights={flights.length}
             />
           </div>
@@ -267,8 +296,8 @@ export default function FlightsPage() {
           <div className="card">
             <ApprovalPanel
               proposals={proposals}
-              isApplying={false}
               onApproveAll={handleApply}
+              isApplying={false}
             />
           </div>
         </div>
