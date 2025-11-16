@@ -34,15 +34,13 @@ export interface Flight {
   riskScore: number;
   route?: string;
 
-  // Path + animation
+  // Synthetic animation
   path?: [number, number][];
   progress?: number;
 
-  // Emergency flag
   isEmergency?: boolean;
 
-  // ⛔ After approval, frozen means nothing changes risk/route anymore
-  frozen?: boolean;
+  frozen?: boolean; // ⛔ after approval, route/risk never changes
 }
 
 export type ConditionType = "weather" | "traffic" | "staffing" | "runway";
@@ -66,7 +64,6 @@ export interface EmergencyScenario {
   type: ConditionType;
 }
 
-// ICAO flight plan fields are required
 export interface RerouteProposal {
   id: string;
   flightId: string;
@@ -85,3 +82,4 @@ export interface RerouteProposal {
   createdAt: string;
   applied?: boolean;
 }
+
