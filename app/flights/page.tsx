@@ -6,7 +6,6 @@ export const dynamic = "force-dynamic";
 import { useEffect, useMemo, useState } from "react";
 import nextDynamic from "next/dynamic";
 
-// FlightMap must be dynamically imported client-side only (Leaflet-safe)
 const FlightMap = nextDynamic(() => import("../../components/FlightMap"), {
   ssr: false
 });
@@ -22,7 +21,7 @@ import type {
   EmergencyScenarioId,
   RerouteProposal
 } from "../../lib/types";
-import { fetchLiveFlights } from "../../lib/api";
+import { createSyntheticFlights, stepFlights } from "../../lib/sim";
 
 const EMERGENCY_SCENARIOS: EmergencyScenario[] = [
   {
@@ -94,21 +93,17 @@ function computeRisk(flight: Flight, scenarioId: EmergencyScenarioId): number {
     (flight.altitude < 20000 ? 0.15 : 0);
 
   if (scenarioId === "wx") {
-    if (flight.longitude > -115 && flight.longitude < -90) {
+    if (flight.longitude > -120 && flight.longitude < -110) {
       risk += 0.35;
       flight.isEmergency = true;
     }
   } else if (scenarioId === "runway") {
-    if (
-      ["KJFK", "KORD", "KATL", "KLAX"].includes(
-        flight.destination.toUpperCase()
-      )
-    ) {
+    if (["KLAX", "KSFO", "KPHX", "KLAS"].includes(flight.destination.toUpperCase())) {
       risk += 0.3;
       flight.isEmergency = true;
     }
   } else if (scenarioId === "staffing") {
-    if (flight.longitude < -115) {
+    if (flight.longitude < -118) {
       risk += 0.25;
       flight.isEmergency = true;
     }
@@ -164,50 +159,46 @@ export default function FlightsPage() {
     useState<EmergencyScenarioId>("wx");
   const [conditions, setConditions] = useState<Condition[]>([]);
   const [proposals, setProposals] = useState<RerouteProposal[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [tickTime, setTickTime] = useState<string | null>(null);
   const [mode, setMode] = useState<"live" | "simulated">("live");
 
-  // Live data loading loop
+  // Initialize synthetic flights + start animation loop
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
 
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const liveFlights = await fetchLiveFlights();
-        if (!isMounted) return;
+    const initial = createSyntheticFlights();
+    if (isMounted) {
+      setFlights(
+        initial.map((f) => ({
+          ...f,
+          riskScore: computeRisk({ ...f }, scenarioId)
+        }))
+      );
+      setTickTime(new Date().toLocaleTimeString());
+    }
 
-        setFlights((prev) => {
-          const prevMap = new Map(prev.map((f) => [f.id, f]));
-          return liveFlights.map((f) => {
-            const existing = prevMap.get(f.id);
-            return existing
-              ? { ...f, route: existing.route, riskScore: existing.riskScore }
-              : f;
-          });
-        });
-
-        setLastUpdated(new Date().toLocaleTimeString());
-      } catch (err) {
-        console.error(err);
-      } finally {
-        isMounted && setIsLoading(false);
-      }
-    };
-
-    void load();
-    intervalId = setInterval(load, 15000);
+    intervalId = setInterval(() => {
+      if (!isMounted) return;
+      setFlights((prev) => {
+        const stepped = stepFlights(prev);
+        return stepped.map((f) => ({
+          ...f,
+          riskScore: computeRisk({ ...f }, scenarioId)
+        }));
+      });
+      setTickTime(new Date().toLocaleTimeString());
+    }, 2000);
 
     return () => {
       isMounted = false;
       clearInterval(intervalId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Recompute risk when scenario changes
+  // Update conditions + recompute risk when scenario changes
   useEffect(() => {
     const scenario =
       EMERGENCY_SCENARIOS.find((s) => s.id === scenarioId) ??
@@ -216,11 +207,14 @@ export default function FlightsPage() {
     setConditions(buildConditionsForScenario(scenario));
 
     setFlights((prev) =>
-      prev.map((f) => ({ ...f, riskScore: computeRisk({ ...f }, scenarioId) }))
+      prev.map((f) => ({
+        ...f,
+        riskScore: computeRisk({ ...f }, scenarioId)
+      }))
     );
   }, [scenarioId]);
 
-  // Generate reroute proposals whenever flights or scenario change
+  // Generate reroute proposals
   useEffect(() => {
     setProposals(generateRerouteProposals(flights, scenarioId));
   }, [flights, scenarioId]);
@@ -245,7 +239,6 @@ export default function FlightsPage() {
 
     setIsApplying(true);
 
-    // Apply proposed routes and reduced risk
     setFlights((prev) =>
       prev.map((f) => {
         const p = proposals.find((p) => p.flightId === f.id);
@@ -256,16 +249,15 @@ export default function FlightsPage() {
 
     setProposals((prev) => prev.map((p) => ({ ...p, applied: true })));
 
-    // Generate simulated positions to visualize reroutes on the map
     setSimulatedFlights(
       flights.map((f, idx) => {
         const p = proposals.find((p) => p.flightId === f.id);
         if (!p) return f;
-        const offset = (idx % 3) - 1; // -1, 0, 1
+        const offset = (idx % 3) - 1;
         return {
           ...f,
-          latitude: f.latitude + offset * 1.2,
-          longitude: f.longitude + offset * 1.8
+          latitude: f.latitude + offset * 0.7,
+          longitude: f.longitude + offset * 1.1
         };
       })
     );
@@ -298,18 +290,14 @@ export default function FlightsPage() {
 
         <div className="flex flex-col items-end gap-1 text-xs text-slate-400">
           <div className="flex items-center gap-2">
-            <span>{isLoading ? "Updating feed" : "Feed connected"}</span>
+            <span>Simulation running</span>
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           </div>
-
-          {lastUpdated && (
+          {tickTime && (
             <span>
-              Last update{" "}
-              <span className="text-slate-200">{lastUpdated}</span>
+              Last tick <span className="text-slate-200">{tickTime}</span>
             </span>
           )}
-
-          {/* Live / Simulated toggle */}
           <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-1 py-0.5">
             <button
               type="button"
@@ -340,7 +328,7 @@ export default function FlightsPage() {
         </div>
       </header>
 
-      {/* Main layout */}
+      {/* Main grid */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.2fr)]">
         {/* Left: Map + flights */}
         <div className="space-y-4">
@@ -407,5 +395,8 @@ export default function FlightsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
   );
 }
