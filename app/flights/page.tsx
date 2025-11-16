@@ -16,27 +16,23 @@ import type {
 } from "../../lib/types";
 import { fetchLiveFlights } from "../../lib/api";
 
-// Three emergencies you can click through
 const EMERGENCY_SCENARIOS: EmergencyScenario[] = [
   {
     id: "wx",
     name: "Convective Weather Line",
-    description:
-      "Thunderstorm line across the central sector corridor requiring route deviations.",
+    description: "",
     type: "weather"
   },
   {
     id: "runway",
     name: "Runway Closure at Hub",
-    description:
-      "Primary arrival runway at major hub unavailable, pushing arrivals onto secondary procedures.",
+    description: "",
     type: "runway"
   },
   {
     id: "staffing",
     name: "Staffing Shortage",
-    description:
-      "Reduced staffing in the western sector, requiring complexity reduction via reroutes.",
+    description: "",
     type: "staffing"
   }
 ];
@@ -53,7 +49,7 @@ function buildConditionsForScenario(
           label: "Convective SIGMET",
           severity: "high",
           description:
-            "Embedded cells and a broken line of thunderstorms along the central corridor.",
+            "Thunderstorm activity along the central corridor.",
           active: true
         }
       ];
@@ -65,7 +61,7 @@ function buildConditionsForScenario(
           label: "Runway 27 Closed",
           severity: "medium",
           description:
-            "Runway 27 at primary hub closed for inspection; arrivals using longer downwind vectors.",
+            "Primary arrival runway at hub unavailable.",
           active: true
         }
       ];
@@ -77,7 +73,7 @@ function buildConditionsForScenario(
           label: "Reduced Staffing",
           severity: "medium",
           description:
-            "Sector staffed with 2 of 3 positions; complexity reduction required.",
+            "Sector staffed with reduced positions.",
           active: true
         }
       ];
@@ -86,27 +82,22 @@ function buildConditionsForScenario(
   }
 }
 
-/**
- * Simple risk model:
- * - Base risk from speed + altitude
- * - Scenario-specific bumps based on longitude / destination
- */
 function computeRisk(flight: Flight, scenarioId: EmergencyScenarioId): number {
-  // Base: faster + lower altitude → slightly higher risk
   let risk =
     0.2 +
     Math.max(0, Math.min(1, (flight.speedKts - 350) / 200)) * 0.3 +
     (flight.altitude < 20000 ? 0.15 : 0);
 
   if (scenarioId === "wx") {
-    // Weather corridor across the middle longitudes
     if (flight.longitude > -115 && flight.longitude < -90) {
       risk += 0.35;
       flight.isEmergency = true;
     }
   } else if (scenarioId === "runway") {
     if (
-      ["KJFK", "KORD", "KATL", "KLAX"].includes(flight.destination.toUpperCase())
+      ["KJFK", "KORD", "KATL", "KLAX"].includes(
+        flight.destination.toUpperCase()
+      )
     ) {
       risk += 0.3;
       flight.isEmergency = true;
@@ -127,11 +118,11 @@ function generateRerouteProposals(
   scenarioId: EmergencyScenarioId
 ): RerouteProposal[] {
   const reasonsByScenario: Record<EmergencyScenarioId, string> = {
-    wx: "Shifts route laterally around convective weather while preserving arrival slot times.",
+    wx: "Route avoids the convective corridor while preserving arrival slots.",
     runway:
-      "Sequences arrivals onto secondary runway and adjusts STARs to reduce vectoring.",
+      "Route steers arrivals to secondary runway and reduces vectoring time.",
     staffing:
-      "Flattens crossing flows and offloads traffic into adjacent sectors to reduce complexity."
+      "Route offloads traffic toward adjacent sector to reduce controller load."
   };
 
   const reason = reasonsByScenario[scenarioId];
@@ -140,14 +131,10 @@ function generateRerouteProposals(
     .filter((f) => f.riskScore >= 0.6)
     .map((flight, idx) => {
       const riskAfter = Number((flight.riskScore * 0.4).toFixed(2));
-
       const currentRoute =
         flight.route ||
-        `${flight.origin} ... ${flight.destination}`;
-
-      const proposedRoute = `${flight.origin} DCT REROUTE${idx + 1} ${
-        flight.destination
-      }`;
+        `${flight.origin} DCT DIRECT${idx + 1} ${flight.destination}`;
+      const proposedRoute = `${flight.origin} DCT REROUTE${idx + 1} ${flight.destination}`;
 
       return {
         id: `prop-${flight.id}`,
@@ -166,6 +153,9 @@ function generateRerouteProposals(
 
 export default function FlightsPage() {
   const [flights, setFlights] = useState<Flight[]>([]);
+  const [simulatedFlights, setSimulatedFlights] = useState<Flight[] | null>(
+    null
+  );
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(
     null
   );
@@ -176,8 +166,8 @@ export default function FlightsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [mode, setMode] = useState<"live" | "simulated">("live");
 
-  // Load initial flights + poll for updates
   useEffect(() => {
     let isMounted = true;
     let intervalId: NodeJS.Timeout;
@@ -189,7 +179,6 @@ export default function FlightsPage() {
         if (!isMounted) return;
 
         setFlights((prev) => {
-          // When new data arrives, reattach any existing routes if ids match
           const previousById = new Map(prev.map((f) => [f.id, f]));
           return liveFlights.map((f) => {
             const existing = previousById.get(f.id);
@@ -208,8 +197,6 @@ export default function FlightsPage() {
     };
 
     void load();
-
-    // Poll every 15 seconds to simulate "real-time"
     intervalId = setInterval(load, 15_000);
 
     return () => {
@@ -218,7 +205,6 @@ export default function FlightsPage() {
     };
   }, []);
 
-  // Update risk + conditions + proposals whenever flights or scenario change
   useEffect(() => {
     const scenario =
       EMERGENCY_SCENARIOS.find((s) => s.id === scenarioId) ??
@@ -234,7 +220,6 @@ export default function FlightsPage() {
     );
   }, [scenarioId]);
 
-  // Recompute proposals whenever risk/scenario changes
   useEffect(() => {
     setProposals(generateRerouteProposals(flights, scenarioId));
   }, [flights, scenarioId]);
@@ -251,6 +236,8 @@ export default function FlightsPage() {
 
   const handleScenarioChange = (id: EmergencyScenarioId) => {
     setScenarioId(id);
+    setMode("live");
+    setSimulatedFlights(null);
   };
 
   const handleApproveAll = () => {
@@ -258,7 +245,6 @@ export default function FlightsPage() {
 
     setIsApplying(true);
 
-    // Simulate applying reroutes by updating flight plans + risk
     setFlights((prev) =>
       prev.map((f) => {
         const proposal = proposals.find((p) => p.flightId === f.id);
@@ -273,10 +259,34 @@ export default function FlightsPage() {
 
     setProposals((prev) => prev.map((p) => ({ ...p, applied: true })));
 
+    // Generate simulated flight positions to visualize rerouted paths
+    setSimulatedFlights((prev) => {
+      return flights.map((f, idx) => {
+        const proposal = proposals.find((p) => p.flightId === f.id);
+        if (!proposal) return f;
+        const offset = (idx % 3) - 1; // -1, 0, 1
+        return {
+          ...f,
+          latitude: f.latitude + offset * 1.2,
+          longitude: f.longitude + offset * 1.8
+        };
+      });
+    });
+
+    setMode("simulated");
+
     setTimeout(() => {
       setIsApplying(false);
     }, 400);
   };
+
+  const airportsSummary = useMemo(() => {
+    const pairs = new Set<string>();
+    flights.forEach((f) => {
+      pairs.add(`${f.origin} → ${f.destination}`);
+    });
+    return Array.from(pairs).slice(0, 6);
+  }, [flights]);
 
   return (
     <div className="space-y-4">
@@ -285,39 +295,65 @@ export default function FlightsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">
             Live Sector Console
           </h1>
-          <p className="text-slate-300 text-sm max-w-xl">
-            Live flights from your provider, risk-scored in real time with
-            agent-proposed reroutes and human-in-the-loop approvals on a
-            single pane of glass.
-          </p>
+          {airportsSummary.length > 0 && (
+            <p className="mt-1 text-xs text-slate-400">
+              Active flows: {airportsSummary.join("  ·  ")}
+            </p>
+          )}
         </div>
-        <div className="flex flex-col items-end text-xs text-slate-400">
-          <span>
-            {isLoading ? "Updating from live feed…" : "Connected to live feed"}
-          </span>
+        <div className="flex flex-col items-end gap-1 text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <span>{isLoading ? "Updating feed" : "Feed connected"}</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          </div>
           {lastUpdated && (
-            <span className="mt-0.5">
-              Last update at <span className="text-slate-200">{lastUpdated}</span>
+            <span>
+              Last update <span className="text-slate-200">{lastUpdated}</span>
             </span>
           )}
+          <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-1 py-0.5">
+            <button
+              type="button"
+              onClick={() => setMode("live")}
+              className={`rounded-full px-2 py-0.5 text-[11px] ${
+                mode === "live"
+                  ? "bg-slate-100 text-slate-900"
+                  : "text-slate-300"
+              }`}
+            >
+              Live
+            </button>
+            <button
+              type="button"
+              onClick={() => simulatedFlights && setMode("simulated")}
+              disabled={!simulatedFlights}
+              className={`rounded-full px-2 py-0.5 text-[11px] ${
+                mode === "simulated"
+                  ? "bg-slate-100 text-slate-900"
+                  : !simulatedFlights
+                  ? "text-slate-500"
+                  : "text-slate-300"
+              }`}
+            >
+              Simulated
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.2fr)]">
-        {/* LEFT: Map + flights list */}
         <div className="space-y-4">
           <div className="card h-[360px] md:h-[420px]">
             <div className="mb-3 flex items-center justify-between text-sm">
               <h2 className="font-medium">Sector Map</h2>
               <span className="text-xs text-slate-500">
-                {flights.length.toString().padStart(2, "0")} active flight
-                paths
+                {flights.length.toString().padStart(2, "0")} tracked flights
               </span>
             </div>
             <FlightMap
               flights={flights}
-              selectedFlightId={selectedFlightId}
-              scenarioId={scenarioId}
+              simulatedFlights={simulatedFlights || undefined}
+              mode={mode}
             />
           </div>
 
@@ -325,7 +361,7 @@ export default function FlightsPage() {
             <div className="flex items-center justify-between text-sm">
               <h2 className="font-medium">Active Flights</h2>
               <span className="text-xs text-slate-500">
-                Click a flight to highlight it on the map.
+                Select a flight to inspect airports and position.
               </span>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -345,7 +381,6 @@ export default function FlightsPage() {
           </div>
         </div>
 
-        {/* RIGHT: Emergencies + approvals */}
         <div className="space-y-4">
           <div className="card">
             <ConditionsPanel
