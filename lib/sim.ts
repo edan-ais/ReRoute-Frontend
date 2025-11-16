@@ -13,11 +13,11 @@ const AIRPORTS: Airport[] = [
   { code: "KSAN", name: "San Diego Intl", lat: 32.7338, lon: -117.1933 },
   { code: "KSFO", name: "San Francisco Intl", lat: 37.6213, lon: -122.3790 },
   { code: "KSMF", name: "Sacramento Intl", lat: 38.6954, lon: -121.5908 },
-  { code: "KLAS", name: "Harry Reid Intl (Las Vegas)", lat: 36.0840, lon: -115.1537 },
+  { code: "KLAS", name: "Harry Reid Intl", lat: 36.0840, lon: -115.1537 },
   { code: "KPHX", name: "Phoenix Sky Harbor", lat: 33.4342, lon: -112.0116 }
 ];
 
-// Predefined flows to keep everything visible in one sector
+// Predefined flows
 const ROUTES: [string, string][] = [
   ["KLAX", "KSFO"],
   ["KSAN", "KLAX"],
@@ -32,138 +32,105 @@ const ROUTES: [string, string][] = [
 ];
 
 function findAirport(code: string): Airport {
-  const found = AIRPORTS.find((a) => a.code === code);
-  return found ?? AIRPORTS[0];
+  return AIRPORTS.find(a => a.code === code) ?? AIRPORTS[0];
 }
 
-// Simple distance in lat/lon space
-function segmentLength(a: [number, number], b: [number, number]): number {
+function segLen(a: [number, number], b: [number, number]): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-// Interpolate along a polyline for t in [0,1]
-function interpolatePath(path: [number, number][], t: number): {
-  lat: number;
-  lon: number;
-} {
-  if (path.length === 0) {
-    return { lat: 0, lon: 0 };
-  }
-  if (path.length === 1) {
-    return { lat: path[0][0], lon: path[0][1] };
-  }
+// Path interpolation
+function interpolate(path: [number, number][], t: number) {
+  if (path.length < 2) return { lat: path[0][0], lon: path[0][1] };
 
   const total = path
     .slice(0, -1)
-    .reduce((sum, pt, idx) => sum + segmentLength(pt, path[idx + 1]), 0);
+    .reduce((sum, p, idx) => sum + segLen(p, path[idx + 1]), 0);
 
-  if (total === 0) {
-    return { lat: path[0][0], lon: path[0][1] };
-  }
-
-  const target = t * total;
+  let dist = t * total;
   let acc = 0;
 
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i];
     const b = path[i + 1];
-    const segLen = segmentLength(a, b);
-    if (acc + segLen >= target) {
-      const localT = (target - acc) / segLen;
+    const len = segLen(a, b);
+
+    if (acc + len >= dist) {
+      const tt = (dist - acc) / len;
       return {
-        lat: a[0] + localT * (b[0] - a[0]),
-        lon: a[1] + localT * (b[1] - a[1])
+        lat: a[0] + tt * (b[0] - a[0]),
+        lon: a[1] + tt * (b[1] - a[1])
       };
     }
-    acc += segLen;
+    acc += len;
   }
 
   const last = path[path.length - 1];
   return { lat: last[0], lon: last[1] };
 }
 
-// Create a curved path between origin and destination
-function buildCurvedPath(
-  origin: Airport,
-  dest: Airport,
-  curveFactor: number
-): [number, number][] {
-  const start: [number, number] = [origin.lat, origin.lon];
-  const end: [number, number] = [dest.lat, dest.lon];
+// Curved 3-point path
+function curved(origin: Airport, dest: Airport, curveDir: number) {
+  const midLat = (origin.lat + dest.lat) / 2 + curveDir * 1.2;
+  const midLon = (origin.lon + dest.lon) / 2 + curveDir * 0.6;
 
-  const midLat = (origin.lat + dest.lat) / 2 + curveFactor * 1.2;
-  const midLon = (origin.lon + dest.lon) / 2 + curveFactor * 0.6;
-
-  const mid: [number, number] = [midLat, midLon];
-
-  // 3-point path = visible "turn"
-  return [start, mid, end];
+  return [
+    [origin.lat, origin.lon],
+    [midLat, midLon],
+    [dest.lat, dest.lon]
+  ] as [number, number][];
 }
 
 export function createSyntheticFlights(): Flight[] {
-  const flights: Flight[] = [];
+  return ROUTES.map(([o, d], i) => {
+    const orig = findAirport(o);
+    const dest = findAirport(d);
 
-  for (let i = 0; i < ROUTES.length; i++) {
-    const [origCode, destCode] = ROUTES[i];
-    const origin = findAirport(origCode);
-    const dest = findAirport(destCode);
+    const path = curved(orig, dest, i % 2 === 0 ? 1 : -1);
+    const progress = 0.1 + i * 0.08;
+    const pos = interpolate(path, progress);
 
-    const curveDir = i % 2 === 0 ? 1 : -1;
-    const path = buildCurvedPath(origin, dest, curveDir);
-
-    const initialProgress = 0.2 + 0.06 * i; // spread along path
-    const pos = interpolatePath(path, initialProgress);
-
-    const callsign = `FL${i + 1}`;
-
-    flights.push({
-      id: callsign,
-      callsign,
-      origin: origin.code,
-      destination: dest.code,
-      originName: origin.name,
+    return {
+      id: `FL${i + 1}`,
+      callsign: `FL${i + 1}`,
+      origin: o,
+      destination: d,
+      originName: orig.name,
       destinationName: dest.name,
       status: "enroute",
       phase: "cruise",
       latitude: pos.lat,
       longitude: pos.lon,
       altitude: 30000 + i * 500,
-      speedKts: 430 + (i % 3) * 15,
+      speedKts: 440 + (i % 3) * 12,
       riskScore: 0.3,
-      route: `${origin.code} DCT FIX${i + 1} ${dest.code}`,
+      route: `${o} DCT FIX${i + 1} ${d}`,
       path,
-      progress: initialProgress,
-      isEmergency: false
-    });
-  }
-
-  return flights;
+      progress,
+      isEmergency: false,
+      frozen: false
+    };
+  });
 }
 
-// Move each flight a small step forward along its path
-export function stepFlights(prevFlights: Flight[]): Flight[] {
-  const delta = 0.01; // how far to move each tick
+// After approval: frozen = true means NEVER change route/risk again
+export function stepFlights(prev: Flight[]) {
+  return prev.map(f => {
+    if (!f.path || f.path.length < 2) return f;
 
-  return prevFlights.map((flight) => {
-    if (!flight.path || flight.path.length < 2) {
-      return flight;
-    }
-
-    const prevProgress = flight.progress ?? Math.random();
-    const nextProgress = (prevProgress + delta) % 1;
-
-    const pos = interpolatePath(flight.path, nextProgress);
-    const altJitter =
-      flight.altitude + Math.sin(nextProgress * Math.PI * 2) * 300;
+    // Frozen flights still move, but do NOT change route/risk
+    const prog = (f.progress ?? 0) + 0.01;
+    const next = prog % 1;
+    const pos = interpolate(f.path, next);
 
     return {
-      ...flight,
-      progress: nextProgress,
+      ...f,
+      progress: next,
       latitude: pos.lat,
       longitude: pos.lon,
-      altitude: altJitter
+      altitude: f.altitude + Math.sin(next * Math.PI * 2) * 200
     };
   });
 }
