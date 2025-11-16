@@ -6,8 +6,10 @@ export type FlightStatus = "scheduled" | "enroute" | "landed" | "delayed" | "can
 export interface Flight {
   id: string;
   callsign: string;
-  origin: string;
-  destination: string;
+  origin: string;           // IATA/ICAO code (e.g. KLAX)
+  destination: string;      // IATA/ICAO code (e.g. KJFK)
+  originName?: string;      // Full airport name (e.g. Los Angeles International)
+  destinationName?: string; // Full airport name
   status: FlightStatus;
   phase: FlightPhase;
   latitude: number;
