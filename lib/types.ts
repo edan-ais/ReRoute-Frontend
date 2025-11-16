@@ -1,15 +1,27 @@
 // lib/types.ts
 
-export type FlightPhase = "climb" | "cruise" | "descent" | "approach" | "taxi" | "parked";
-export type FlightStatus = "scheduled" | "enroute" | "landed" | "delayed" | "cancelled";
+export type FlightPhase =
+  | "climb"
+  | "cruise"
+  | "descent"
+  | "approach"
+  | "taxi"
+  | "parked";
+
+export type FlightStatus =
+  | "scheduled"
+  | "enroute"
+  | "landed"
+  | "delayed"
+  | "cancelled";
 
 export interface Flight {
   id: string;
   callsign: string;
-  origin: string;           // IATA/ICAO code (e.g. KLAX)
-  destination: string;      // IATA/ICAO code (e.g. KSFO)
-  originName?: string;      // Full airport name
-  destinationName?: string; // Full airport name
+  origin: string; // ICAO code (e.g. KLAX)
+  destination: string; // ICAO code (e.g. KSFO)
+  originName?: string;
+  destinationName?: string;
   status: FlightStatus;
   phase: FlightPhase;
   latitude: number;
@@ -17,11 +29,12 @@ export interface Flight {
   altitude: number;
   speedKts: number;
   riskScore: number;
-  route?: string;
+  route?: string; // route string for map + display
 
-  // NEW: synthetic path + animation progress
+  // Synthetic path & animation progress along that path
   path?: [number, number][];
   progress?: number;
+
   isEmergency?: boolean;
 }
 
@@ -50,8 +63,15 @@ export interface RerouteProposal {
   id: string;
   flightId: string;
   callsign: string;
+
+  // Simple route strings
   currentRoute: string;
   proposedRoute: string;
+
+  // ICAO-style “physical” flight plans you can read like ATC
+  icaoBefore: string;
+  icaoAfter: string;
+
   riskBefore: number;
   riskAfter: number;
   reason: string;
