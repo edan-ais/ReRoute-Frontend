@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import ApprovalPanel from "../../components/ApprovalPanel";
 import type { RerouteProposal } from "../../lib/types";
 
@@ -15,11 +16,31 @@ const mockProposals: RerouteProposal[] = [
     riskAfter: 0.34,
     reason:
       "Avoids convective activity in central corridor and reduces sector density.",
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    applied: false
   }
 ];
 
 export default function ApprovalsPage() {
+  const [proposals, setProposals] = useState<RerouteProposal[]>(mockProposals);
+  const [isApplying, setIsApplying] = useState(false);
+
+  const handleApproveAll = () => {
+    setIsApplying(true);
+
+    // simulate applying reroutes (riskAfter, applied flag)
+    setProposals((prev) =>
+      prev.map((p) => ({
+        ...p,
+        applied: true
+      }))
+    );
+
+    setTimeout(() => {
+      setIsApplying(false);
+    }, 400);
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">
@@ -30,7 +51,11 @@ export default function ApprovalsPage() {
         reroute will apply the updated flight plan to the mission state.
       </p>
 
-      <ApprovalPanel proposals={mockProposals} />
+      <ApprovalPanel
+        proposals={proposals}
+        onApproveAll={handleApproveAll}
+        isApplying={isApplying}
+      />
     </div>
   );
 }
