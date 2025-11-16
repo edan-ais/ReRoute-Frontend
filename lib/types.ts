@@ -7,8 +7,8 @@ export interface Flight {
   id: string;
   callsign: string;
   origin: string;           // IATA/ICAO code (e.g. KLAX)
-  destination: string;      // IATA/ICAO code (e.g. KJFK)
-  originName?: string;      // Full airport name (e.g. Los Angeles International)
+  destination: string;      // IATA/ICAO code (e.g. KSFO)
+  originName?: string;      // Full airport name
   destinationName?: string; // Full airport name
   status: FlightStatus;
   phase: FlightPhase;
@@ -18,11 +18,14 @@ export interface Flight {
   speedKts: number;
   riskScore: number;
   route?: string;
+
+  // NEW: synthetic path + animation progress
+  path?: [number, number][];
+  progress?: number;
   isEmergency?: boolean;
 }
 
 export type ConditionType = "weather" | "traffic" | "staffing" | "runway";
-
 export type ConditionSeverity = "low" | "medium" | "high";
 
 export interface Condition {
