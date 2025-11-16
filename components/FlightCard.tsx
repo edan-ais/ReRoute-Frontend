@@ -1,63 +1,58 @@
-// components/FlightCard.tsx
-"use client";
-
 import type { Flight } from "../lib/types";
-import RiskBadge from "./RiskBadge";
 
 interface FlightCardProps {
   flight: Flight;
-  selected?: boolean;
-  onSelect?: () => void;
+  selected: boolean;
+  onSelect: () => void;
 }
 
 export default function FlightCard({
   flight,
   selected,
-  onSelect
+  onSelect,
 }: FlightCardProps) {
   const originLabel = flight.originName
     ? `${flight.origin} · ${flight.originName}`
     : flight.origin;
+
   const destinationLabel = flight.destinationName
     ? `${flight.destination} · ${flight.destinationName}`
     : flight.destination;
 
   return (
     <button
-      type="button"
       onClick={onSelect}
-      className={`w-full text-left rounded-xl border px-3 py-3 text-sm transition hover:border-sky-500/70 hover:bg-sky-500/5 ${
+      className={`w-full text-left rounded-xl border p-3 transition ${
         selected
-          ? "border-sky-500/80 bg-sky-500/10"
-          : "border-slate-800 bg-slate-900/60"
+          ? "border-sky-400 bg-sky-950/40"
+          : "border-slate-700 bg-slate-900/40 hover:bg-slate-800/40"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex flex-col">
-          <span className="font-medium">
-            {flight.callsign}{" "}
-            <span className="text-xs text-slate-400">({flight.id})</span>
-          </span>
-          <span className="text-xs text-slate-400">
-            {originLabel} → {destinationLabel}
-          </span>
+      <div className="flex justify-between">
+        <div className="font-semibold">{flight.callsign}</div>
+        <div className="text-xs text-slate-400">
+          Risk {Math.round(flight.riskScore * 100)}
         </div>
-        <RiskBadge value={flight.riskScore} />
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-400">
-        <span>
-          {Math.round(flight.altitude).toLocaleString()} ft ·{" "}
-          {Math.round(flight.speedKts)} kts
-        </span>
-        <span className="hidden md:inline">
-          {flight.latitude.toFixed(2)}°
-          {flight.latitude >= 0 ? "N" : "S"},{" "}
-          {Math.abs(flight.longitude).toFixed(2)}°
-          {flight.longitude <= 0 ? "W" : "E"}
-        </span>
-        <span className="capitalize text-slate-300">{flight.phase}</span>
+      <div className="mt-1 text-sm text-slate-300">
+        {originLabel} → {destinationLabel}
       </div>
+
+      <div className="mt-1 text-xs text-slate-500">
+        {Math.round(flight.altitude).toLocaleString()} ft ·{" "}
+        {Math.round(flight.speedKts)} kts
+      </div>
+
+      <div className="text-xs text-slate-500">
+        {flight.latitude.toFixed(2)}°N, {flight.longitude.toFixed(2)}°W
+      </div>
+
+      {flight.route && (
+        <div className="mt-2 text-xs text-sky-300">
+          Route: {flight.route}
+        </div>
+      )}
     </button>
   );
 }
