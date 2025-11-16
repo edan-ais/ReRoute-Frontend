@@ -1,3 +1,5 @@
+// lib/sim.ts
+
 import type { Airport, Flight } from "./types";
 
 // ---------------------------------------------------------
@@ -31,7 +33,7 @@ export function interpolatePath(
 }
 
 // ---------------------------------------------------------
-// Synthetic initial flight path generator
+// Synthetic initial flight path generator (curved)
 // ---------------------------------------------------------
 export function generateRandomPath(
   origin: Airport,
@@ -72,15 +74,12 @@ export function buildCurvedPath(
 }
 
 // ---------------------------------------------------------
-// Move flights forward along their paths
+// Move flights forward along their paths (visual animation)
 // ---------------------------------------------------------
 export function stepFlights(prevFlights: Flight[]): Flight[] {
-  const delta = 0.02; // animation speed
+  const delta = 0.02; // animation speed per tick
 
   return prevFlights.map((f) => {
-    // Approved flight → never overwrite path or progress
-    if (f.frozen) return f;
-
     if (!f.path || f.path.length < 2) return f;
 
     const nextProgress = (f.progress + delta) % 1;
@@ -95,4 +94,3 @@ export function stepFlights(prevFlights: Flight[]): Flight[] {
     };
   });
 }
-
