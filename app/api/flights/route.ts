@@ -14,11 +14,9 @@ export async function GET(req: Request) {
 
   const incomingUrl = new URL(req.url);
 
-  // Build external request URL
   const externalUrl = new URL(`${BASE_URL}/flights`);
   externalUrl.searchParams.set("access_key", API_KEY);
 
-  // Pass through filters (flight_date, airline, dep_iata, etc.)
   incomingUrl.searchParams.forEach((val, key) => {
     externalUrl.searchParams.set(key, val);
   });
@@ -39,4 +37,3 @@ export async function GET(req: Request) {
     );
   }
 }
-
